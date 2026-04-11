@@ -1,11 +1,13 @@
 using System.Net.Mime;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
-using Microsoft.AspNetCore.Authorization;
+using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
-namespace Jellyfin.Plugin.ThemeSongs.Api
+namespace Jellyfin.Plugin.YtdlpThemeSongs.Api
 {
     /// <summary>
     /// The Theme Songs api controller.
@@ -13,8 +15,6 @@ namespace Jellyfin.Plugin.ThemeSongs.Api
     [ApiController]
     [Route("ThemeSongs")]
     [Produces(MediaTypeNames.Application.Json)]
-    
-
     public class ThemeSongsController : ControllerBase
     {
         private readonly ThemeSongsManager _themeSongsManager;
@@ -22,31 +22,29 @@ namespace Jellyfin.Plugin.ThemeSongs.Api
 
         /// <summary>
         /// Initializes a new instance of <see cref="ThemeSongsController"/>.
-
+        /// </summary>
         public ThemeSongsController(
             ILibraryManager libraryManager,
+            IMediaEncoder mediaEncoder,
             ILogger<ThemeSongsManager> logger)
         {
-            _themeSongsManager = new ThemeSongsManager(libraryManager,  logger);
+            _themeSongsManager = new ThemeSongsManager(libraryManager, mediaEncoder, logger);
             _logger = logger;
         }
 
         /// <summary>
-        /// Downloads all Tv theme songs.
+        /// Downloads theme songs for all TV series, seasons, and movies.
         /// </summary>
-        /// <reponse code="204">Theme song download started successfully. </response>
+        /// <response code="204">Theme song download started successfully.</response>
         /// <returns>A <see cref="NoContentResult"/> indicating success.</returns>
-        [HttpPost("DownloadTVShows")]
+        [HttpPost("DownloadAll")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
-        public ActionResult DownloadTVThemeSongsRequest()
+        public async Task<ActionResult> DownloadAllRequest()
         {
-            _logger.LogInformation("Downloading TV Theme Songs");
-            _themeSongsManager.DownloadAllThemeSongs();
-            _logger.LogInformation("Completed");
+            _logger.LogInformation("Downloading all theme songs");
+            await _themeSongsManager.DownloadAllThemeSongsAsync(null!, CancellationToken.None).ConfigureAwait(false);
+            _logger.LogInformation("Theme song download completed");
             return NoContent();
         }
-
-        
-
     }
 }

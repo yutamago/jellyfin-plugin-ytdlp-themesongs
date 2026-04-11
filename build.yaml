@@ -1,15 +1,13 @@
 ---
-name: "jellyfin-plugin-tmdbboxsets"
-guid: "bc4aad2e-d3d0-4725-a5e2-fd07949e5b42"
-version: "5" # Please increment with each pull request
-jellyfin_version: "10.5.0" # The earliest binary-compatible version
-owner: "jellyfin"
-nicename: "TMDb Box Sets"
-description: "Automatically create movie box sets based on TMDb collections"
-overview: "Automatically create movie box sets based on TMDb collections"
-category: "Metadata"
+name: "jellyfin-plugin-ytdlp-themesongs"
+guid: "8DD7851B-67E5-4B50-9BBD-69368C7E67EE"
+version: "1.0.0.0"
+targetAbi: "10.9.0.0"
+framework: "net10.0"
+overview: "Automatically downloads theme songs for your movies and series"
+description: >
+  Automatically downloads theme songs for your movies and series
+category: "General"
+owner: "yutamago"
 artifacts:
-  - "Jellyfin.Plugin.TMDbBoxSets.dll"
-build_type: "dotnet"
-dotnet_configuration: "Release"
-dotnet_framework: "netstandard2.1"
+  - "Jellyfin.Plugin.YtdlpThemeSongs.dll"
