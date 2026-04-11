@@ -11,3 +11,4 @@ category: "General"
 owner: "yutamago"
 artifacts:
   - "Jellyfin.Plugin.YtdlpThemeSongs.dll"
+changelog:
