@@ -15,28 +15,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install PyYAML
-        run: pip install pyyaml --quiet
-
-      - name: Generate manifest.json
+      - name: Fetch release data
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          gh release list --repo "$GITHUB_REPOSITORY" \
+            --json tagName,publishedAt,body,assets \
+            --limit 100 > /tmp/releases.json
+
+          mkdir -p /tmp/release-assets
+          while IFS= read -r release; do
+            tag=$(echo "$release" | jq -r '.tagName')
+            md5name=$(echo "$release" | jq -r '[.assets[] | select(.name | endswith(".zip.md5"))] | first | .name // empty')
+            if [ -n "$md5name" ]; then
+              gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+                --pattern "$md5name" --dir /tmp/release-assets --clobber 2>/dev/null || true
+            fi
+          done < <(jq -c '.[]' /tmp/releases.json)
+
+      - name: Generate manifest.json
+        run: |
+          pip install pyyaml --quiet
           python3 - <<'PYEOF'
-          import json, os, subprocess, yaml, pathlib
+          import json, os, yaml, pathlib
 
           with open('build.yaml') as f:
               meta = yaml.safe_load(f)
 
+          with open('/tmp/releases.json') as f:
+              releases = json.load(f)
+
           repo = os.environ['GITHUB_REPOSITORY']
-
-          result = subprocess.run(
-              ['gh', 'release', 'list', '--repo', repo,
-               '--json', 'tagName,publishedAt,body,assets', '--limit', '100'],
-              capture_output=True, text=True, check=True
-          )
-          releases = json.loads(result.stdout)
-
           versions = []
           for rel in releases:
               zips = [a for a in rel['assets']
@@ -49,15 +58,8 @@ jobs:
               zip_name = zips[0]['name']
               checksum = ''
               if md5s:
-                  tmpdir = pathlib.Path('/tmp/release-assets')
-                  tmpdir.mkdir(exist_ok=True)
-                  r = subprocess.run(
-                      ['gh', 'release', 'download', tag, '--repo', repo,
-                       '--pattern', md5s[0]['name'], '--dir', str(tmpdir), '--clobber'],
-                      capture_output=True, text=True
-                  )
-                  md5_file = tmpdir / md5s[0]['name']
-                  if r.returncode == 0 and md5_file.exists():
+                  md5_file = pathlib.Path('/tmp/release-assets') / md5s[0]['name']
+                  if md5_file.exists():
                       checksum = md5_file.read_text().strip()
 
               timestamp = rel['publishedAt'].replace('T', ' ').rstrip('Z')
