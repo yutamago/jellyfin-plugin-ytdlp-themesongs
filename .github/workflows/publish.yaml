@@ -1,18 +1,43 @@
-name: '🚀 Publish Plugin'
+name: Publish
 
 on:
-  release:
-    types:
-      - released
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*.*'
+
+permissions:
+  contents: write
 
 jobs:
-  call:
-    uses: jellyfin/jellyfin-meta-plugins/.github/workflows/publish.yaml@master
-    with:
-      version: ${{ github.event.release.tag_name }}
-      is-unstable: ${{ github.event.release.prerelease }}
-    secrets:
-      deploy-host: ${{ secrets.DEPLOY_HOST }}
-      deploy-user: ${{ secrets.DEPLOY_USER }}
-      deploy-key: ${{ secrets.DEPLOY_KEY }}
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: dotnet build -c Release -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          zip -j dist/Jellyfin.Plugin.YtdlpThemeSongs_${{ steps.version.outputs.version }}.zip \
+            Jellyfin.Plugin.YtdlpThemeSongs/bin/Release/net10.0/Jellyfin.Plugin.YtdlpThemeSongs.dll
+          md5sum dist/Jellyfin.Plugin.YtdlpThemeSongs_${{ steps.version.outputs.version }}.zip \
+            | awk '{ print $1 }' \
+            > dist/Jellyfin.Plugin.YtdlpThemeSongs_${{ steps.version.outputs.version }}.zip.md5
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

@@ -1,15 +1,10 @@
----
 name: "YT Theme Song Downloader"
 guid: "8DD7851B-67E5-4B50-9BBD-69368C7E67EE"
-version: 1
-targetAbi: "10.11.7.0"
+targetAbi: "10.11.8.0"
 framework: "net10.0"
 overview: "Automatically downloads theme songs for your movies and series"
-description: >
-  Automatically downloads theme songs for your movies and series
+description: "Automatically downloads theme songs for your movies and series"
 category: "General"
-owner: "yutamago"
+owner: "Yutamago"
 artifacts:
   - "Jellyfin.Plugin.YtdlpThemeSongs.dll"
-changelog:
-  -

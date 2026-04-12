@@ -1,0 +1,21 @@
+name: Update Manifest
+
+on:
+  release:
+    types: [published, deleted]
+
+permissions:
+  contents: write
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate manifest.json and deploy to gh-pages
+        uses: Kevinjil/jellyfin-plugin-repo-action@v0
+        with:
+          source_github_token: ${{ secrets.GITHUB_TOKEN }}
+          target_github_token: ${{ secrets.GITHUB_TOKEN }}
+          target_repository: ${{ github.repository }}
+          target_branch: gh-pages
