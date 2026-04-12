@@ -19,10 +19,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # gh release list only exposes metadata; body+assets require gh release view
           gh release list --repo "$GITHUB_REPOSITORY" \
-            --json tagName,publishedAt,body,assets \
-            --limit 100 > /tmp/releases.json
+            --json tagName --limit 100 \
+            | jq -r '.[].tagName' > /tmp/tags.txt
 
+          # Fetch full details for each tag, then slurp into a single JSON array
+          while IFS= read -r tag; do
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+              --json tagName,publishedAt,body,assets
+          done < /tmp/tags.txt | jq -s '.' > /tmp/releases.json
+
+          # Download .zip.md5 files for checksums
           mkdir -p /tmp/release-assets
           while IFS= read -r release; do
             tag=$(echo "$release" | jq -r '.tagName')
