@@ -1,4 +1,4 @@
-name: "YT Theme Song Downloader"
+name: "yt-dlp Theme Songs"
 guid: "8dd7851b-67e5-4b50-9bbd-69368c7e67ee"
 targetAbi: "10.11.8.0"
 framework: "net10.0"
