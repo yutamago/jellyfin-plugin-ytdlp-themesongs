@@ -26,7 +26,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     }
 
     /// <inheritdoc />
-    public override Guid Id => Guid.Parse("8DD7851B-67E5-4B50-9BBD-69368C7E67EE");
+    public override Guid Id => Guid.Parse("8dd7851b-67e5-4b50-9bbd-69368c7e67ee");
     /// <inheritdoc />
     public override string Name => "Theme Songs";
     /// <inheritdoc />

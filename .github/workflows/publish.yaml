@@ -27,11 +27,42 @@ jobs:
       - name: Build
         run: dotnet build -c Release -p:Version=${{ steps.version.outputs.version }}
 
+      - name: Generate meta.json
+        run: |
+          pip install pyyaml --quiet
+          python3 - <<'PYEOF'
+          import json, yaml, datetime
+
+          with open('build.yaml') as f:
+              meta = yaml.safe_load(f)
+
+          import os
+          version = os.environ['VERSION']
+          timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+          with open('meta.json', 'w') as f:
+              json.dump({
+                  'category':    meta.get('category', 'General'),
+                  'changelog':   '',
+                  'description': meta.get('description', ''),
+                  'guid':        meta['guid'].lower(),
+                  'name':        meta['name'],
+                  'overview':    meta.get('overview', ''),
+                  'owner':       meta.get('owner', ''),
+                  'targetAbi':   meta['targetAbi'],
+                  'timestamp':   timestamp,
+                  'version':     version,
+              }, f, indent=4)
+          PYEOF
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
       - name: Package
         run: |
           mkdir -p dist
           zip -j dist/Jellyfin.Plugin.YtdlpThemeSongs_${{ steps.version.outputs.version }}.zip \
-            Jellyfin.Plugin.YtdlpThemeSongs/bin/Release/net10.0/Jellyfin.Plugin.YtdlpThemeSongs.dll
+            Jellyfin.Plugin.YtdlpThemeSongs/bin/Release/net10.0/Jellyfin.Plugin.YtdlpThemeSongs.dll \
+            meta.json
           md5sum dist/Jellyfin.Plugin.YtdlpThemeSongs_${{ steps.version.outputs.version }}.zip \
             | awk '{ print $1 }' \
             > dist/Jellyfin.Plugin.YtdlpThemeSongs_${{ steps.version.outputs.version }}.zip.md5
