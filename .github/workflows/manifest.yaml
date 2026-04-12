@@ -1,6 +1,7 @@
 name: Update Manifest
 
 on:
+  workflow_call:
   release:
     types: [published, deleted]
 
@@ -12,9 +13,83 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Generate manifest.json and deploy to gh-pages
-        uses: Kevinjil/jellyfin-plugin-repo-action@v0.4.3
+      - uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: pip install pyyaml --quiet
+
+      - name: Generate manifest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, subprocess, yaml, pathlib
+
+          with open('build.yaml') as f:
+              meta = yaml.safe_load(f)
+
+          repo = os.environ['GITHUB_REPOSITORY']
+
+          result = subprocess.run(
+              ['gh', 'release', 'list', '--repo', repo,
+               '--json', 'tagName,publishedAt,body,assets', '--limit', '100'],
+              capture_output=True, text=True, check=True
+          )
+          releases = json.loads(result.stdout)
+
+          versions = []
+          for rel in releases:
+              zips = [a for a in rel['assets']
+                      if a['name'].endswith('.zip') and not a['name'].endswith('.zip.md5')]
+              md5s = [a for a in rel['assets'] if a['name'].endswith('.zip.md5')]
+              if not zips:
+                  continue
+
+              tag = rel['tagName']
+              zip_name = zips[0]['name']
+              checksum = ''
+              if md5s:
+                  tmpdir = pathlib.Path('/tmp/release-assets')
+                  tmpdir.mkdir(exist_ok=True)
+                  r = subprocess.run(
+                      ['gh', 'release', 'download', tag, '--repo', repo,
+                       '--pattern', md5s[0]['name'], '--dir', str(tmpdir), '--clobber'],
+                      capture_output=True, text=True
+                  )
+                  md5_file = tmpdir / md5s[0]['name']
+                  if r.returncode == 0 and md5_file.exists():
+                      checksum = md5_file.read_text().strip()
+
+              timestamp = rel['publishedAt'].replace('T', ' ').rstrip('Z')
+              versions.append({
+                  'version': tag.lstrip('v'),
+                  'changelog': rel.get('body') or '',
+                  'targetAbi': meta['targetAbi'],
+                  'sourceUrl': f'https://github.com/{repo}/releases/download/{tag}/{zip_name}',
+                  'checksum': checksum,
+                  'timestamp': timestamp,
+              })
+
+          manifest = [{
+              'guid': meta['guid'],
+              'name': meta['name'],
+              'description': meta.get('description', ''),
+              'overview': meta.get('overview', ''),
+              'owner': meta.get('owner', ''),
+              'category': meta.get('category', 'General'),
+              'versions': versions,
+          }]
+
+          pathlib.Path('_site').mkdir(exist_ok=True)
+          with open('_site/manifest.json', 'w') as f:
+              json.dump(manifest, f, indent=2)
+          print(json.dumps(manifest, indent=2))
+          PYEOF
+
+      - name: Deploy manifest to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          pagesBranch: 'gh-pages'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: _site
+          publish_branch: gh-pages
+          commit_message: "Update manifest.json"

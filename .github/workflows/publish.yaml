@@ -41,3 +41,10 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+
+  manifest:
+    needs: publish
+    uses: ./.github/workflows/manifest.yaml
+    secrets: inherit
+    permissions:
+      contents: write
