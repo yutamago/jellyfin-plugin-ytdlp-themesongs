@@ -8,6 +8,14 @@
     "category": "Metadata",
     "versions": [
       {
+        "version": "1.0.0.7",
+        "changelog": "**Full Changelog**: https://github.com/yutamago/jellyfin-plugin-ytdlp-themesongs/compare/v1.0.0.6...v1.0.0.7",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/yutamago/jellyfin-plugin-ytdlp-themesongs/releases/download/v1.0.0.7/Jellyfin.Plugin.YtdlpThemeSongs_1.0.0.7.zip",
+        "checksum": "a0f2d9ed0d43c887e92abdc0c10c4d61",
+        "timestamp": "2026-04-13T00:54:12Z"
+      },
+      {
         "version": "1.0.0.6",
         "changelog": "**Full Changelog**: https://github.com/yutamago/jellyfin-plugin-ytdlp-themesongs/compare/v1.0.0.5...v1.0.0.6",
         "targetAbi": "10.11.8.0",
