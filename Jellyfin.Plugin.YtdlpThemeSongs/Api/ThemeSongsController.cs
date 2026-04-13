@@ -1,7 +1,7 @@
 using System;
-using System.IO;
 using System.Net.Mime;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
@@ -13,9 +13,16 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.YtdlpThemeSongs.Api
 {
-    public record RandomItemDto(string Id, string DisplayName, string Query);
+    public record RandomItemDto(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("displayName")]
+        string DisplayName,
+        [property: JsonPropertyName("query")] string Query);
 
-    public record DeleteResultDto(int DeletedCount);
+    public record DeleteResultDto(
+        [property: JsonPropertyName("deletedCount")]
+        int DeletedCount
+    );
 
     /// <summary>
     /// The Theme Songs api controller.
@@ -71,8 +78,8 @@ namespace Jellyfin.Plugin.YtdlpThemeSongs.Api
             {
                 "series" => _themeSongsManager.GetRandomSeries(),
                 "season" => _themeSongsManager.GetRandomSeason(),
-                "movie"  => _themeSongsManager.GetRandomMovie(),
-                _        => null,
+                "movie" => _themeSongsManager.GetRandomMovie(),
+                _ => null,
             };
 
             if (result == null)
