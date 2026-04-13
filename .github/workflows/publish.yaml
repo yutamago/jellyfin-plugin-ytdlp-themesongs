@@ -18,7 +18,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '9.0.x'
 
       - name: Get version from tag
         id: version
@@ -61,7 +61,7 @@ jobs:
         run: |
           mkdir -p dist
           zip -j dist/Jellyfin.Plugin.YtdlpThemeSongs_${{ steps.version.outputs.version }}.zip \
-            Jellyfin.Plugin.YtdlpThemeSongs/bin/Release/net10.0/Jellyfin.Plugin.YtdlpThemeSongs.dll \
+            Jellyfin.Plugin.YtdlpThemeSongs/bin/Release/net9.0/Jellyfin.Plugin.YtdlpThemeSongs.dll \
             meta.json
           md5sum dist/Jellyfin.Plugin.YtdlpThemeSongs_${{ steps.version.outputs.version }}.zip \
             | awk '{ print $1 }' \

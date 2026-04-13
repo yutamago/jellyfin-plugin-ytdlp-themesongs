@@ -1,7 +1,7 @@
 name: "yt-dlp Theme Songs"
 guid: "8dd7851b-67e5-4b50-9bbd-69368c7e67ee"
 targetAbi: "10.11.8.0"
-framework: "net10.0"
+framework: "net9.0"
 overview: "Downloads theme songs for your Jellyfin library via yt-dlp."
 description: "Searches YouTube for theme songs and downloads them using yt-dlp. Audio is processed with FFmpeg (silence removal, loudness normalization) and saved as theme.mp3 per series, season, and movie. Search query templates are fully customizable."
 category: "Metadata"

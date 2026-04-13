@@ -17,6 +17,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.YtdlpThemeSongs;
 
+public delegate Task LogCallbackAsync(string message, CancellationToken cancellationToken);
+
+public record RandomItemResult(string Id, string DisplayName, string Query);
+
 public class ThemeSongsManager : IDisposable
 {
     private readonly ILibraryManager _libraryManager;
@@ -67,6 +71,225 @@ public class ThemeSongsManager : IDisposable
             completed++;
             progress?.Report(total > 0 ? 100.0 * completed / total : 100.0);
         }
+    }
+
+    public RandomItemResult? GetRandomSeries()
+    {
+        var items = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Series],
+            IsVirtualItem = false,
+            Recursive = true,
+        }).OfType<Series>().ToList();
+
+        if (items.Count == 0)
+        {
+            return null;
+        }
+
+        var item = items[Random.Shared.Next(items.Count)];
+        var config = Plugin.Instance?.Configuration;
+        var query = BuildQuery(
+            config?.TvSeriesSearchQuery ?? "{title} TV series official theme song",
+            item.Name,
+            item.ProductionYear?.ToString() ?? string.Empty,
+            seasonNumber: null,
+            seriesTitle: null);
+
+        var year = item.ProductionYear.HasValue ? $" ({item.ProductionYear})" : string.Empty;
+        return new RandomItemResult(item.Id.ToString(), $"{item.Name}{year}", query);
+    }
+
+    public RandomItemResult? GetRandomSeason()
+    {
+        var seasons = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Season],
+            IsVirtualItem = false,
+            Recursive = true,
+        }).OfType<Season>()
+          .Where(s => s.IndexNumber != 0 && !string.IsNullOrEmpty(s.Path))
+          .ToList();
+
+        if (seasons.Count == 0)
+        {
+            return null;
+        }
+
+        var season = seasons[Random.Shared.Next(seasons.Count)];
+        var seriesItem = _libraryManager.GetItemById(season.SeriesId) as Series;
+        var seriesName = seriesItem?.Name ?? season.SeriesName ?? "Unknown";
+
+        var config = Plugin.Instance?.Configuration;
+        var query = BuildQuery(
+            config?.TvSeasonSearchQuery ?? "{seriesTitle} Season {seasonNumber} theme song",
+            seriesName,
+            seriesItem?.ProductionYear?.ToString() ?? string.Empty,
+            season.IndexNumber?.ToString() ?? string.Empty,
+            seriesName);
+
+        var displayName = $"{seriesName} \u2014 Season {season.IndexNumber}";
+        return new RandomItemResult(season.Id.ToString(), displayName, query);
+    }
+
+    public RandomItemResult? GetRandomMovie()
+    {
+        var items = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Movie],
+            IsVirtualItem = false,
+            Recursive = true,
+        }).OfType<Movie>().ToList();
+
+        if (items.Count == 0)
+        {
+            return null;
+        }
+
+        var item = items[Random.Shared.Next(items.Count)];
+        var config = Plugin.Instance?.Configuration;
+        var query = BuildQuery(
+            config?.MovieSearchQuery ?? "{title} {year} official movie theme song",
+            item.Name,
+            item.ProductionYear?.ToString() ?? string.Empty,
+            seasonNumber: null,
+            seriesTitle: null);
+
+        var year = item.ProductionYear.HasValue ? $" ({item.ProductionYear})" : string.Empty;
+        return new RandomItemResult(item.Id.ToString(), $"{item.Name}{year}", query);
+    }
+
+    public async Task DownloadThemeSongForItemAsync(
+        string itemId,
+        string itemType,
+        string query,
+        LogCallbackAsync logCallback,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(itemId, out var guid))
+        {
+            await logCallback("Error: invalid item ID", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var item = _libraryManager.GetItemById(guid);
+        if (item == null)
+        {
+            await logCallback($"Error: item {itemId} not found in library", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        string? outputDir = itemType switch
+        {
+            "series" when item is Series s => s.Path,
+            "season" when item is Season season => season.Path,
+            "movie" when item is Movie m => Path.GetDirectoryName(m.Path),
+            _ => null,
+        };
+
+        if (string.IsNullOrEmpty(outputDir))
+        {
+            await logCallback($"Error: could not determine output directory for {item.Name}", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await DownloadThemeSongAsync(query, outputDir, cancellationToken, logCallback).ConfigureAwait(false);
+    }
+
+    public string? GetThemeFilePath(string itemId, string itemType)
+    {
+        if (!Guid.TryParse(itemId, out var guid))
+        {
+            return null;
+        }
+
+        var item = _libraryManager.GetItemById(guid);
+        if (item == null)
+        {
+            return null;
+        }
+
+        return itemType switch
+        {
+            "series" when item is Series s => Path.Combine(s.Path, "theme.mp3"),
+            "season" when item is Season season => string.IsNullOrEmpty(season.Path)
+                ? null
+                : Path.Combine(season.Path, "theme.mp3"),
+            "movie" when item is Movie m => Path.GetDirectoryName(m.Path) is { } dir
+                ? Path.Combine(dir, "theme.mp3")
+                : null,
+            _ => null,
+        };
+    }
+
+    public Task<int> DeleteAllThemeSongsAsync(CancellationToken cancellationToken)
+    {
+        var series = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Series],
+            IsVirtualItem = false,
+            Recursive = true,
+        }).OfType<Series>().ToList();
+
+        var movies = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Movie],
+            IsVirtualItem = false,
+            Recursive = true,
+        }).OfType<Movie>().ToList();
+
+        int deleted = 0;
+
+        foreach (var serie in series)
+        {
+            var path = Path.Combine(serie.Path, "theme.mp3");
+            if (File.Exists(path))
+            {
+                try { File.Delete(path); deleted++; }
+                catch (Exception ex) { _logger.LogError(ex, "Failed to delete {Path}", path); }
+            }
+
+            var seasons = _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = [BaseItemKind.Season],
+                ParentId = serie.Id,
+                IsVirtualItem = false,
+            }).OfType<Season>().ToList();
+
+            foreach (var season in seasons)
+            {
+                if (season.IndexNumber == 0 || string.IsNullOrEmpty(season.Path))
+                {
+                    continue;
+                }
+
+                var seasonPath = Path.Combine(season.Path, "theme.mp3");
+                if (File.Exists(seasonPath))
+                {
+                    try { File.Delete(seasonPath); deleted++; }
+                    catch (Exception ex) { _logger.LogError(ex, "Failed to delete {Path}", seasonPath); }
+                }
+            }
+        }
+
+        foreach (var movie in movies)
+        {
+            var movieDir = Path.GetDirectoryName(movie.Path);
+            if (string.IsNullOrEmpty(movieDir))
+            {
+                continue;
+            }
+
+            var path = Path.Combine(movieDir, "theme.mp3");
+            if (File.Exists(path))
+            {
+                try { File.Delete(path); deleted++; }
+                catch (Exception ex) { _logger.LogError(ex, "Failed to delete {Path}", path); }
+            }
+        }
+
+        _logger.LogInformation("Deleted {Count} theme song(s)", deleted);
+        return Task.FromResult(deleted);
     }
 
     private async Task ProcessSeriesAsync(Series series, CancellationToken cancellationToken)
@@ -171,12 +394,25 @@ public class ThemeSongsManager : IDisposable
             .Replace("{seriesTitle}", seriesTitle ?? title, StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task DownloadThemeSongAsync(string query, string outputDir, CancellationToken cancellationToken)
+    private async Task DownloadThemeSongAsync(
+        string query,
+        string outputDir,
+        CancellationToken cancellationToken,
+        LogCallbackAsync? logCallback = null)
     {
+        async Task LogAsync(string msg)
+        {
+            _logger.LogInformation("{Msg}", msg);
+            if (logCallback != null)
+            {
+                await logCallback(msg, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         var ytDlp = ResolveYtDlp();
         if (ytDlp == null)
         {
-            _logger.LogError("yt-dlp not found. Skipping theme song download for {OutputDir}", outputDir);
+            await LogAsync($"Error: yt-dlp not found. Skipping download for {outputDir}").ConfigureAwait(false);
             return;
         }
 
@@ -199,26 +435,19 @@ public class ThemeSongsManager : IDisposable
             $"ytsearch3:{query}"
         };
 
-        _logger.LogInformation(
-            "Downloading theme song for {OutputDir} with query: {Query}",
-            outputDir,
-            query);
+        await LogAsync($"Searching YouTube for: {query}").ConfigureAwait(false);
 
         var (exitCode, _, stderr) = await RunProcessAsync(ytDlp, args, cancellationToken).ConfigureAwait(false);
         if (exitCode != 0)
         {
-            _logger.LogWarning(
-                "yt-dlp exited with code {ExitCode} for query: {Query}. Stderr: {Stderr}",
-                exitCode,
-                query,
-                stderr);
+            await LogAsync($"yt-dlp failed (exit {exitCode}): {stderr}").ConfigureAwait(false);
             return;
         }
 
         var tempFiles = Directory.GetFiles(tempDir, $"theme_{guid}*.mp3");
         if (tempFiles.Length == 0)
         {
-            _logger.LogWarning("yt-dlp completed but no .mp3 file found for query: {Query}", query);
+            await LogAsync($"No .mp3 file found after download for query: {query}").ConfigureAwait(false);
             return;
         }
 
@@ -227,11 +456,11 @@ public class ThemeSongsManager : IDisposable
 
         try
         {
-            await PostProcessAsync(downloadedFile, processedFile, cancellationToken).ConfigureAwait(false);
+            await PostProcessAsync(downloadedFile, processedFile, cancellationToken, logCallback).ConfigureAwait(false);
 
             var destPath = Path.Combine(outputDir, "theme.mp3");
             File.Move(processedFile, destPath, overwrite: true);
-            _logger.LogInformation("Theme song saved to {DestPath}", destPath);
+            await LogAsync($"Theme song saved to {destPath}").ConfigureAwait(false);
         }
         finally
         {
@@ -247,9 +476,24 @@ public class ThemeSongsManager : IDisposable
         }
     }
 
-    private async Task PostProcessAsync(string inputMp3, string outputMp3, CancellationToken cancellationToken)
+    private async Task PostProcessAsync(
+        string inputMp3,
+        string outputMp3,
+        CancellationToken cancellationToken,
+        LogCallbackAsync? logCallback = null)
     {
+        async Task LogAsync(string msg)
+        {
+            _logger.LogInformation("{Msg}", msg);
+            if (logCallback != null)
+            {
+                await logCallback(msg, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         var ffmpeg = _mediaEncoder.EncoderPath;
+
+        await LogAsync("Post-processing audio (loudnorm pass 1)...").ConfigureAwait(false);
 
         // Pass 1: loudnorm analysis
         var pass1Args = new[]
@@ -265,7 +509,7 @@ public class ThemeSongsManager : IDisposable
         var jsonMatch = Regex.Match(stderr1, @"\{[^{}]*""input_i""[^{}]*\}", RegexOptions.Singleline);
         if (!jsonMatch.Success)
         {
-            _logger.LogWarning("Could not parse loudnorm JSON from ffmpeg output. Using simple copy.");
+            await LogAsync("Could not parse loudnorm analysis; using simple copy.").ConfigureAwait(false);
             File.Copy(inputMp3, outputMp3, overwrite: true);
             return;
         }
@@ -279,9 +523,12 @@ public class ThemeSongsManager : IDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to deserialize loudnorm stats. Using simple copy.");
+            await LogAsync("Failed to parse loudnorm stats; using simple copy.").ConfigureAwait(false);
             File.Copy(inputMp3, outputMp3, overwrite: true);
             return;
         }
+
+        await LogAsync("Post-processing audio (loudnorm pass 2)...").ConfigureAwait(false);
 
         // Pass 2: silence removal + normalized output
         var audioFilter =
@@ -301,7 +548,7 @@ public class ThemeSongsManager : IDisposable
         var (exitCode2, _, _) = await RunProcessAsync(ffmpeg, pass2Args, cancellationToken).ConfigureAwait(false);
         if (exitCode2 != 0)
         {
-            _logger.LogWarning("ffmpeg pass 2 failed (exit {ExitCode}). Using simple copy.", exitCode2);
+            await LogAsync($"FFmpeg pass 2 failed (exit {exitCode2}); using simple copy.").ConfigureAwait(false);
             File.Copy(inputMp3, outputMp3, overwrite: true);
         }
     }
